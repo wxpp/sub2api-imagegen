@@ -63,11 +63,27 @@ Windows PowerShell，当前终端临时生效：
 $env:OPENAI_API_KEY = "<YOUR_API_KEY>"
 ```
 
+Windows 用户级永久设置：
+
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "<YOUR_API_KEY>", "User")
+```
+
+设置后重启 Codex，使新环境变量生效。
+
 macOS / Linux，当前终端临时生效：
 
 ```bash
 export OPENAI_API_KEY="<YOUR_API_KEY>"
 ```
+
+macOS / Linux 持久设置：根据当前使用的 shell，将下面一行添加到 `~/.zshrc` 或 `~/.bashrc`：
+
+```bash
+export OPENAI_API_KEY="<YOUR_API_KEY>"
+```
+
+保存后重启终端和 Codex。
 
 ### Base URL
 
@@ -75,19 +91,54 @@ Base URL 没有默认值，必须使用以下方式之一显式配置。
 
 方式一：设置 `OPENAI_BASE_URL`。
 
-Windows PowerShell：
+Windows PowerShell，当前终端临时生效：
 
 ```powershell
 $env:OPENAI_BASE_URL = "https://your-image-api.example/v1"
 ```
 
-macOS / Linux：
+Windows 用户级永久设置：
+
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", "https://your-image-api.example/v1", "User")
+```
+
+设置后重启 Codex，使新环境变量生效。
+
+macOS / Linux，当前终端临时生效：
 
 ```bash
 export OPENAI_BASE_URL="https://your-image-api.example/v1"
 ```
 
+macOS / Linux 持久设置：根据当前使用的 shell，将下面一行添加到 `~/.zshrc` 或 `~/.bashrc`：
+
+```bash
+export OPENAI_BASE_URL="https://your-image-api.example/v1"
+```
+
+保存后重启终端和 Codex。
+
 方式二：在已安装的 Skill 目录中创建 `config.local.json`。
+
+安装目录：
+
+- Windows：`C:\Users\<用户名>\.codex\skills\sub2api-imagegen`
+- macOS / Linux：`~/.codex/skills/sub2api-imagegen`
+
+Windows PowerShell，从安装目录中的示例文件复制：
+
+```powershell
+Copy-Item -LiteralPath "$HOME\.codex\skills\sub2api-imagegen\config.example.json" -Destination "$HOME\.codex\skills\sub2api-imagegen\config.local.json"
+```
+
+macOS / Linux，从安装目录中的示例文件复制：
+
+```bash
+cp "$HOME/.codex/skills/sub2api-imagegen/config.example.json" "$HOME/.codex/skills/sub2api-imagegen/config.local.json"
+```
+
+然后编辑 `config.local.json`：
 
 ```json
 {
@@ -95,7 +146,7 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 }
 ```
 
-可以从 `sub2api-imagegen/config.example.json` 复制。`config.local.json` 已被 `.gitignore` 忽略，只能保存 Base URL，不能保存 API Key。若同时配置，`OPENAI_BASE_URL` 优先。
+`config.local.json` 已被 `.gitignore` 忽略，只能保存 Base URL，绝对不能保存 API Key。若同时配置，`OPENAI_BASE_URL` 优先。
 
 ## 使用
 
