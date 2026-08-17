@@ -2,23 +2,6 @@
 
 一个可复用的个人 Codex Skill，用于通过用户自己配置的 OpenAI-compatible Images API 生成和编辑图片。
 
-它使用官方 OpenAI Python SDK，但会在请求发出前：
-
-- 删除所有 `X-Stainless-*` 请求头；
-- 将 `User-Agent` 设置为 `python-requests/2.32.5`；
-- 保留 `Authorization`、`Content-Type` 等必要请求头。
-
-这适合会拦截 OpenAI SDK 默认请求特征、但兼容 Images API 的网关。Skill 只调用 Images API，不调用 Responses API。
-
-## 功能
-
-- 根据提示词生成一张或多张图片；
-- 使用一张或多张输入图片执行编辑；
-- 支持 `b64_json` 和图片 URL 两种响应；
-- 支持 `size`、`model`、`n`、`quality`、`output_format`；
-- 默认不覆盖已有文件，除非显式传入 `--force`；
-- 支持 `--dry-run`，可在不发送请求、不读取 Key 的情况下检查配置和参数。
-
 ## 前置条件
 
 - Codex；
@@ -120,26 +103,6 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 
 ```text
 使用 $sub2api-imagegen 生成一张草地上的小机器人图片。
-```
-
-也可以进入已安装的 Skill 目录后直接运行脚本。
-
-生成图片：
-
-```bash
-uv run scripts/sub2api_imagegen.py generate --prompt "small robot on grass" --size 1024x1024 --out ./robot.png
-```
-
-编辑图片：
-
-```bash
-uv run scripts/sub2api_imagegen.py edit --image ./source.png --prompt "replace the sky with a soft sunset" --out ./edited.png
-```
-
-只检查配置和参数，不发送请求：
-
-```bash
-uv run scripts/sub2api_imagegen.py generate --prompt "small robot on grass" --size 1024x1024 --out ./robot.png --dry-run
 ```
 
 默认模型为 `gpt-image-2`。如果网关使用其他模型，请添加 `--model <MODEL_ID>`。仅在网关明确支持时传入 `--quality` 或 `--output-format`。
