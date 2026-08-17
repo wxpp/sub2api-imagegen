@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sub2API Image Generator"
+  short_description: "Generate and edit images through your configured gateway"
+  default_prompt: "Use $sub2api-imagegen to generate an image from my prompt."
