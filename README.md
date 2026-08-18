@@ -7,7 +7,7 @@
 - Codex；
 - [`uv`](https://docs.astral.sh/uv/)；
 - 一个支持 OpenAI-compatible Images API 的服务；
-- 该服务提供的 API Key 和 Base URL。
+- 支持生图的 API Key 和 Base URL。
 
 你的网关至少需要兼容以下一种或两种能力：
 
@@ -57,12 +57,6 @@ cp -R ./sub2api-imagegen-repo/sub2api-imagegen "$HOME/.codex/skills/sub2api-imag
 
 `OPENAI_API_KEY` 只能通过环境变量提供。不要把 Key 写进仓库、`config.local.json`、提示词或日志。
 
-Windows PowerShell，当前终端临时生效：
-
-```powershell
-$env:OPENAI_API_KEY = "<YOUR_API_KEY>"
-```
-
 Windows 用户级永久设置：
 
 ```powershell
@@ -70,12 +64,6 @@ Windows 用户级永久设置：
 ```
 
 设置后重启 Codex，使新环境变量生效。
-
-macOS / Linux，当前终端临时生效：
-
-```bash
-export OPENAI_API_KEY="<YOUR_API_KEY>"
-```
 
 macOS / Linux 持久设置：根据当前使用的 shell，将下面一行添加到 `~/.zshrc` 或 `~/.bashrc`：
 
@@ -89,37 +77,7 @@ export OPENAI_API_KEY="<YOUR_API_KEY>"
 
 Base URL 没有默认值，必须使用以下方式之一显式配置。
 
-方式一：设置 `OPENAI_BASE_URL`。
-
-Windows PowerShell，当前终端临时生效：
-
-```powershell
-$env:OPENAI_BASE_URL = "https://your-image-api.example/v1"
-```
-
-Windows 用户级永久设置：
-
-```powershell
-[Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", "https://your-image-api.example/v1", "User")
-```
-
-设置后重启 Codex，使新环境变量生效。
-
-macOS / Linux，当前终端临时生效：
-
-```bash
-export OPENAI_BASE_URL="https://your-image-api.example/v1"
-```
-
-macOS / Linux 持久设置：根据当前使用的 shell，将下面一行添加到 `~/.zshrc` 或 `~/.bashrc`：
-
-```bash
-export OPENAI_BASE_URL="https://your-image-api.example/v1"
-```
-
-保存后重启终端和 Codex。
-
-方式二：在已安装的 Skill 目录中创建 `config.local.json`。
+方式一：在已安装的 Skill 目录中创建 `config.local.json`。
 
 安装目录：
 
@@ -146,7 +104,23 @@ cp "$HOME/.codex/skills/sub2api-imagegen/config.example.json" "$HOME/.codex/skil
 }
 ```
 
-`config.local.json` 已被 `.gitignore` 忽略，只能保存 Base URL，绝对不能保存 API Key。若同时配置，`OPENAI_BASE_URL` 优先。
+方式二：设置永久环境变量 `OPENAI_BASE_URL`。
+
+Windows 用户级永久设置：
+
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", "https://your-image-api.example/v1", "User")
+```
+
+设置后重启 Codex，使新环境变量生效。
+
+macOS / Linux 持久设置：根据当前使用的 shell，将下面一行添加到 `~/.zshrc` 或 `~/.bashrc`：
+
+```bash
+export OPENAI_BASE_URL="https://your-image-api.example/v1"
+```
+
+保存后重启终端和 Codex。若同时配置，`OPENAI_BASE_URL` 优先。
 
 ## 使用
 
