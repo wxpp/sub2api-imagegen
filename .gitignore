@@ -1,0 +1,5 @@
+sub2api-imagegen/config.local.json
+__pycache__/
+.pytest_cache/
+*.py[cod]
+output/

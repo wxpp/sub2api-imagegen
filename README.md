@@ -1,6 +1,6 @@
 # sub2api-imagegen
 
-一个可复用的个人 Codex Skill，用于通过用户自己配置的 OpenAI-compatible Images API 生成和编辑图片。
+一个可复用的 Codex Skill，用于通过用户自己配置的 OpenAI-compatible Images API 生成、批量生成和编辑图片。
 
 ## 前置条件
 
@@ -14,7 +14,7 @@
 - `POST /images/generations`
 - `POST /images/edits`
 
-具体模型、尺寸、质量和输出格式由你的服务商决定。
+具体模型和参数是否可用，最终由你的服务商决定。
 
 ## 使用 Skill Installer 安装
 
@@ -130,13 +130,17 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 使用 $sub2api-imagegen 生成一张草地上的小机器人图片。
 ```
 
-默认模型为 `gpt-image-2`。如果网关使用其他模型，请添加 `--model <MODEL_ID>`。仅在网关明确支持时传入 `--quality` 或 `--output-format`。
+CLI 默认使用 `gpt-image-2`、`size=auto`、`quality=medium`、`output_format=png`，默认输出到 `output/imagegen/output.png`。如果网关使用其他 GPT Image 模型，需要在请求中指定对应模型 ID。
+
+Skill 同时支持长提示词文件、多图编辑、Mask、提示词结构字段、1–10 张变体、透明背景校验、可选下采样，以及带并发、重试和失败策略的批处理输入（纯提示词行或 JSON 对象）。它会处理 Images API 返回的 Base64 图片或图片 URL。完整参数由安装后的 `sub2api-imagegen/references/cli.md` 说明。
+
+`--dry-run` 会检查 Base URL、参数、输入和输出路径，但不会读取 API Key 或发送请求。除非明确使用 `--force`，已有文件不会被覆盖。
 
 ## 安全说明
 
 - 仓库不包含任何真实 API Key 或 Base URL；
 - 脚本不会打印、保存或硬编码 API Key；
-- `--dry-run` 会显示 Base URL 和请求参数，但不会显示或读取 API Key；
+- `--dry-run` 会显示请求参数和输出计划，但不会显示或读取 API Key；
 - 输出文件已存在时，脚本会拒绝覆盖；只有确认需要覆盖时才使用 `--force`；
 - 请只使用你信任的 API 网关，因为请求和图片内容会经过该服务。
 
@@ -145,7 +149,7 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 - `OPENAI_BASE_URL is required`：设置 `OPENAI_BASE_URL`，或创建合法的 `config.local.json`；
 - `OPENAI_API_KEY is required`：执行真实请求前设置 `OPENAI_API_KEY`；
 - `403` 或请求被拦截：确认网关接受该 User-Agent，并检查是否还有网关侧安全规则；
-- `400` 或参数不支持：检查模型 ID、尺寸、质量和输出格式，去掉网关不支持的可选参数；
+- `400` 或参数不支持：检查网关是否支持当前模型及 CLI 发送的默认或显式参数；
 - `refusing to overwrite existing output`：更换输出路径，或确认后添加 `--force`；
 - 编辑失败：确认输入图片存在，并确认网关实现了 Images Edit API。
 
