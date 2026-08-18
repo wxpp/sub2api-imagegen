@@ -148,3 +148,7 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 - `400` 或参数不支持：检查模型 ID、尺寸、质量和输出格式，去掉网关不支持的可选参数；
 - `refusing to overwrite existing output`：更换输出路径，或确认后添加 `--force`；
 - 编辑失败：确认输入图片存在，并确认网关实现了 Images Edit API。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。
