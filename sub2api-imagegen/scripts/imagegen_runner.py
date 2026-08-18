@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -32,14 +33,14 @@ class PreparedJob:
     index: int | None = None
 
 
-def _input_path(value: str, base_dir: Path | None = None) -> Path:
+def _input_path(value: str, base_dir: Path | None = None, *, label: str = "image") -> Path:
     path = Path(value).expanduser()
     if base_dir is not None and not path.is_absolute():
         path = base_dir / path
     if not path.is_file():
         raise ValueError(f"input file does not exist: {path}")
     if path.stat().st_size >= MAX_INPUT_BYTES:
-        raise ValueError(f"input file must be smaller than 50MB: {path}")
+        print(f"warning: {label} reaches or exceeds 50MB: {path}", file=sys.stderr)
     return path
 
 
@@ -63,7 +64,12 @@ def prepare_job(
             raise ValueError("edit requires between 1 and 16 --image values")
         images = [_input_path(value, base_dir) for value in raw_images]
         if copied.get("mask"):
-            mask = _input_path(str(copied["mask"]), base_dir)
+            mask = _input_path(str(copied["mask"]), base_dir, label="mask")
+            if mask.suffix.lower() != ".png":
+                print(
+                    f"warning: mask should be a PNG with an alpha channel: {mask}",
+                    file=sys.stderr,
+                )
     plan = plan_outputs(
         copied,
         raw_prompt,

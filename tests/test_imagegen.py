@@ -35,6 +35,7 @@ from imagegen_io import (
     response_bytes,
     save_images,
 )
+from imagegen_runner import MAX_INPUT_BYTES, _input_path, prepare_job
 from imagegen_support import (
     clean_sdk_headers,
     request_kwargs,
@@ -161,13 +162,45 @@ class BatchTests(unittest.TestCase):
             source = Path(directory) / "jobs.jsonl"
             source.write_text(
                 "# comment\n\nplain prompt\n"
-                '{"prompt":"nested","fields":{"style":"ink"},"scene":"studio"}\n',
+                '{"prompt":"nested","fields":{"style":"ink","future_field":"ignored"},'
+                '"scene":"studio","future_option":true}\n',
                 encoding="utf-8",
             )
             jobs = _read_jobs(source)
             self.assertEqual(jobs[0], {"prompt": "plain prompt"})
-            self.assertEqual(jobs[1]["fields"], {"style": "ink"})
+            self.assertEqual(jobs[1]["fields"]["style"], "ink")
+            self.assertEqual(jobs[1]["fields"]["future_field"], "ignored")
             self.assertEqual(jobs[1]["scene"], "studio")
+            self.assertTrue(jobs[1]["future_option"])
+
+    def test_large_input_and_non_png_mask_warn_without_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            large = root / "large.png"
+            with large.open("wb") as stream:
+                stream.truncate(MAX_INPUT_BYTES)
+            warnings = io.StringIO()
+            with redirect_stderr(warnings):
+                self.assertEqual(_input_path(str(large)), large)
+            self.assertIn("reaches or exceeds 50MB", warnings.getvalue())
+
+            source = root / "source.png"
+            source.write_bytes(b"source")
+            mask = root / "mask.jpg"
+            mask.write_bytes(b"mask")
+            warnings = io.StringIO()
+            with redirect_stderr(warnings):
+                prepare_job(
+                    "edit",
+                    {
+                        **DEFAULTS,
+                        "prompt": "change background",
+                        "prompt_file": None,
+                        "image": [str(source)],
+                        "mask": str(mask),
+                    },
+                )
+            self.assertIn("mask should be a PNG with an alpha channel", warnings.getvalue())
 
     def test_batch_job_limit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -273,8 +306,8 @@ class DryRunTests(unittest.TestCase):
             jobs = temp / "jobs.jsonl"
             jobs.write_text(
                 "# ignored\n\nfirst plain prompt\n"
-                '{"prompt":"second","fields":{"style":"ink"},"n":2,'
-                '"output_format":"webp"}\n',
+                '{"prompt":"second","fields":{"style":"ink","future":"ignored"},'
+                '"n":2,"output_format":"webp","future_option":true}\n',
                 encoding="utf-8",
             )
             generate = self.run_cli(["generate", "--prompt", "robot", "--dry-run"], temp)

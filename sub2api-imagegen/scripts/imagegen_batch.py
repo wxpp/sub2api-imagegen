@@ -26,47 +26,6 @@ from imagegen_runner import (
 MAX_BATCH_JOBS = 500
 MAX_CONCURRENCY = 25
 MAX_ATTEMPTS = 10
-PROMPT_FIELD_KEYS = {
-    "use_case",
-    "scene",
-    "subject",
-    "style",
-    "composition",
-    "lighting",
-    "palette",
-    "materials",
-    "text",
-    "constraints",
-    "negative",
-}
-
-JOB_KEYS = {
-    "prompt",
-    "model",
-    "n",
-    "size",
-    "quality",
-    "background",
-    "output_format",
-    "output_compression",
-    "moderation",
-    "out",
-    "augment",
-    "use_case",
-    "scene",
-    "subject",
-    "style",
-    "composition",
-    "lighting",
-    "palette",
-    "materials",
-    "text",
-    "constraints",
-    "negative",
-    "downscale_max_dim",
-    "downscale_suffix",
-    "fields",
-}
 
 
 def _read_jobs(path: Path) -> list[dict[str, Any]]:
@@ -86,21 +45,11 @@ def _read_jobs(path: Path) -> list[dict[str, Any]]:
                 raise TypeError(f"batch line {line_number} must be a JSON object")
         else:
             value = {"prompt": line}
-        unknown = sorted(set(value) - JOB_KEYS)
-        if unknown:
-            raise ValueError(f"batch line {line_number} has unknown field(s): {', '.join(unknown)}")
         if not str(value.get("prompt") or "").strip():
             raise ValueError(f"batch line {line_number} requires a non-empty prompt")
         fields = value.get("fields")
-        if fields is not None:
-            if not isinstance(fields, dict):
-                raise TypeError(f"batch line {line_number} fields must be a JSON object")
-            unknown_fields = sorted(set(fields) - PROMPT_FIELD_KEYS)
-            if unknown_fields:
-                raise ValueError(
-                    f"batch line {line_number} has unknown nested field(s): "
-                    + ", ".join(unknown_fields)
-                )
+        if fields is not None and not isinstance(fields, dict):
+            raise TypeError(f"batch line {line_number} fields must be a JSON object")
         jobs.append(value)
     if not jobs:
         raise ValueError("batch input contains no jobs")

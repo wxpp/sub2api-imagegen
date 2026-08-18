@@ -10,6 +10,8 @@ Use this reference when an image request needs controls beyond a basic generatio
 
 All commands accept either `--prompt` or `--prompt-file`. They also accept `--model`, `--size`, `--quality`, `--background`, `--output-format`, `--output-compression`, `--moderation`, `--force`, `--dry-run`, and output/downscale controls.
 
+Edit input files at or above 50MB produce a warning instead of a local rejection; the gateway still decides whether to accept them. A non-PNG mask also produces a warning because masks are expected to be PNG files with an alpha channel.
+
 ## Prompt fields
 
 Augmentation is on unless `--no-augment` is passed. Available fields are:
@@ -52,7 +54,7 @@ Without an output option, a one-off job writes `output/imagegen/output.png`. Mul
 
 The input file accepts up to 500 jobs. Blank lines and lines beginning with `#` are ignored. Every remaining line is either a plain prompt or a JSON object with a non-empty `prompt`.
 
-JSON jobs may override generation values, prompt fields, output filename, or downscale values. Prompt fields may appear directly on the job or inside a nested `fields` object; a non-null flat value wins over the corresponding nested value. A job-level `out` must be a relative filename under the batch output directory.
+JSON jobs may override generation values, prompt fields, output filename, or downscale values. Prompt fields may appear directly on the job or inside a nested `fields` object; a non-null flat value wins over the corresponding nested value. Unknown top-level or nested fields are ignored, allowing forward-compatible job files. A job-level `out` must be a relative filename under the batch output directory.
 
 Use:
 
