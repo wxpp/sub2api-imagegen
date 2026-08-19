@@ -53,9 +53,22 @@ cp -R ./sub2api-imagegen-repo/sub2api-imagegen "$HOME/.codex/skills/sub2api-imag
 
 ## 配置
 
+Skill 可以自动读取 CC Switch 当前启用的 Codex Provider，也可以独立使用本地配置文件或环境变量。配置优先级如下：
+
+- Base URL：CC Switch 当前 Codex Provider → `config.local.json` → `OPENAI_BASE_URL`；
+- API Key：CC Switch 当前 Codex Provider → `OPENAI_API_KEY`。
+
+如果没有安装 CC Switch，或者其配置缺失、被锁定、已损坏、结构不兼容、无法唯一确定当前 Codex Provider，Skill 会安全回退到下一种配置来源，不会自行猜测 Provider。
+
+### 使用 CC Switch（可选）
+
+在 CC Switch 中启用一个 Codex Provider 后，Skill 会从默认目录 `~/.cc-switch` 只读获取该 Provider 的 API Key 和 Base URL，不需要重复设置环境变量。
+
+Skill 只接受 CC Switch 明确选中的当前 Codex Provider；如果选择记录不一致，则只在数据库中恰好有一个当前 Codex Provider 时使用它。读取过程中不会修改 CC Switch 数据库，也不会输出 Key 或 Base URL。
+
 ### API Key
 
-`OPENAI_API_KEY` 只能通过环境变量提供。不要把 Key 写进仓库、`config.local.json`、提示词或日志。
+如果不使用 CC Switch，或当前 Codex Provider 没有可用的 Key，请通过 `OPENAI_API_KEY` 环境变量提供。不要把 Key 写进仓库、`config.local.json`、提示词或日志。
 
 Windows 用户级永久设置：
 
@@ -75,7 +88,7 @@ export OPENAI_API_KEY="<YOUR_API_KEY>"
 
 ### Base URL
 
-Base URL 没有默认值，必须使用以下方式之一显式配置。
+Base URL 没有默认值。如果不使用 CC Switch，或当前 Codex Provider 没有可用的 Base URL，必须使用以下方式之一显式配置。
 
 方式一：在已安装的 Skill 目录中创建 `config.local.json`。
 
@@ -120,7 +133,7 @@ macOS / Linux 持久设置：根据当前使用的 shell，将下面一行添加
 export OPENAI_BASE_URL="https://your-image-api.example/v1"
 ```
 
-保存后重启终端和 Codex。若同时配置，`OPENAI_BASE_URL` 优先。
+保存后重启终端和 Codex。如果两种独立配置同时存在，`config.local.json` 优先于 `OPENAI_BASE_URL`；CC Switch 当前 Codex Provider 的优先级最高。
 
 ## 使用
 
@@ -134,20 +147,21 @@ CLI 默认使用 `gpt-image-2`、`size=auto`、`quality=medium`、`output_format
 
 Skill 同时支持长提示词文件、多图编辑、Mask、提示词结构字段、1–10 张变体、透明背景校验、可选下采样，以及带并发、重试和失败策略的批处理输入（纯提示词行或 JSON 对象）。它会处理 Images API 返回的 Base64 图片或图片 URL。完整参数由安装后的 `sub2api-imagegen/references/cli.md` 说明。
 
-`--dry-run` 会检查 Base URL、参数、输入和输出路径，但不会读取 API Key 或发送请求。除非明确使用 `--force`，已有文件不会被覆盖。
+`--dry-run` 会检查 Base URL、参数、输入和输出路径，但不会查询 CC Switch 中的 Key、读取 `OPENAI_API_KEY` 或发送请求。除非明确使用 `--force`，已有文件不会被覆盖。
 
 ## 安全说明
 
 - 仓库不包含任何真实 API Key 或 Base URL；
 - 脚本不会打印、保存或硬编码 API Key；
-- `--dry-run` 会显示请求参数和输出计划，但不会显示或读取 API Key；
+- CC Switch 数据库始终以 SQLite 只读模式打开；
+- `--dry-run` 会显示请求参数和输出计划，可能读取 Base URL，但不会查询、显示或读取 API Key；
 - 输出文件已存在时，脚本会拒绝覆盖；只有确认需要覆盖时才使用 `--force`；
 - 请只使用你信任的 API 网关，因为请求和图片内容会经过该服务。
 
 ## 常见错误
 
-- `OPENAI_BASE_URL is required`：设置 `OPENAI_BASE_URL`，或创建合法的 `config.local.json`；
-- `OPENAI_API_KEY is required`：执行真实请求前设置 `OPENAI_API_KEY`；
+- `a Base URL is required`：在 CC Switch 中启用有效的 Codex Provider、创建合法的 `config.local.json`，或设置 `OPENAI_BASE_URL`；
+- `an API key is required`：在 CC Switch 中启用包含 Key 的 Codex Provider，或在真实请求前设置 `OPENAI_API_KEY`；
 - `403` 或请求被拦截：确认网关接受该 User-Agent，并检查是否还有网关侧安全规则；
 - `400` 或参数不支持：检查网关是否支持当前模型及 CLI 发送的默认或显式参数；
 - `refusing to overwrite existing output`：更换输出路径，或确认后添加 `--force`；

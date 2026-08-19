@@ -64,4 +64,4 @@ Use:
 
 The retry delay honors a discoverable `Retry-After`; otherwise it uses bounded exponential backoff. Invalid parameters, response decoding errors, and filesystem failures are not retried.
 
-Batch dry-runs parse and validate every job and all limits but do not start workers or read the API key.
+Batch dry-runs parse and validate every job and all limits but do not start workers or query/read the API key. They may read the Base URL from the current CC Switch Codex provider.

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from ccswitch_config import resolve_ccswitch_api_key, resolve_ccswitch_base_url
 from openai import DefaultHttpxClient, OpenAI
 
 DEFAULT_MODEL = "gpt-image-2"
@@ -44,11 +45,9 @@ def clean_sdk_headers(request: httpx.Request) -> None:
 
 
 def resolve_base_url() -> str:
-    value = os.environ.get("OPENAI_BASE_URL")
+    value = resolve_ccswitch_base_url()
     if value is not None:
-        if value.strip():
-            return value.strip()
-        raise RuntimeError("OPENAI_BASE_URL is set but empty")
+        return value
     if LOCAL_CONFIG_PATH.is_file():
         try:
             config = json.loads(LOCAL_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -58,15 +57,25 @@ def resolve_base_url() -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
         raise RuntimeError(f'{LOCAL_CONFIG_PATH.name} requires a non-empty "base_url" string')
+    value = os.environ.get("OPENAI_BASE_URL")
+    if value is not None:
+        if value.strip():
+            return value.strip()
+        raise RuntimeError("OPENAI_BASE_URL is set but empty")
     raise RuntimeError(
-        "OPENAI_BASE_URL is required; set it or create config.local.json from config.example.json"
+        "a Base URL is required from CC Switch, config.local.json, or OPENAI_BASE_URL"
     )
 
 
-def make_client(base_url: str) -> OpenAI:
-    key = os.environ.get("OPENAI_API_KEY")
+def resolve_api_key() -> str:
+    key = resolve_ccswitch_api_key() or os.environ.get("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("OPENAI_API_KEY is required for a live image request")
+        raise RuntimeError("an API key is required from CC Switch or OPENAI_API_KEY")
+    return key
+
+
+def make_client(base_url: str) -> OpenAI:
+    key = resolve_api_key()
     transport = DefaultHttpxClient(event_hooks={"request": [clean_sdk_headers]})
     return OpenAI(api_key=key, base_url=base_url, http_client=transport)
 

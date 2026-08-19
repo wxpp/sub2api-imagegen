@@ -4,6 +4,7 @@
 #   "httpx>=0.27,<1",
 #   "openai>=2,<3",
 #   "pillow>=10,<13",
+#   "tomli>=2,<3; python_version < '3.11'",
 # ]
 # ///
 

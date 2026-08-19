@@ -120,21 +120,23 @@ class SupportTests(unittest.TestCase):
         with patch("imagegen_io._download", return_value=b"downloaded-image"):
             self.assertEqual(response_bytes({"url": "https://example.invalid/image.png"}), b"downloaded-image")
 
-    def test_base_url_environment_precedes_local_config(self) -> None:
+    def test_base_url_local_config_precedes_environment(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.local.json"
             config.write_text('{"base_url":"https://file.invalid/v1"}', encoding="utf-8")
             with (
                 patch.object(imagegen_support, "LOCAL_CONFIG_PATH", config),
+                patch.object(imagegen_support, "resolve_ccswitch_base_url", return_value=None),
                 patch.dict(
                     os.environ,
                     {"OPENAI_BASE_URL": "https://environment.invalid/v1"},
                     clear=True,
                 ),
             ):
-                self.assertEqual(resolve_base_url(), "https://environment.invalid/v1")
+                self.assertEqual(resolve_base_url(), "https://file.invalid/v1")
             with (
                 patch.object(imagegen_support, "LOCAL_CONFIG_PATH", config),
+                patch.object(imagegen_support, "resolve_ccswitch_base_url", return_value=None),
                 patch.dict(os.environ, {}, clear=True),
             ):
                 self.assertEqual(resolve_base_url(), "https://file.invalid/v1")
@@ -292,6 +294,8 @@ class DryRunTests(unittest.TestCase):
                 os.environ,
                 {"OPENAI_BASE_URL": "https://example.invalid/v1"},
                 clear=True,
+            ), patch.object(
+                imagegen_support, "resolve_ccswitch_base_url", return_value=None
             ), redirect_stdout(output):
                 code = main(arguments)
         finally:

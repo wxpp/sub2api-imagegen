@@ -9,9 +9,9 @@ Use `scripts/sub2api_imagegen.py` for every image request. Run it through `uv`; 
 
 ## Configure
 
-Require each user to provide a Base URL. Prefer `OPENAI_BASE_URL`; otherwise read `base_url` from `config.local.json` in the skill root. To use the file-based option, copy `config.example.json` to `config.local.json` and replace the placeholder URL. Never put an API key in either configuration file.
+Require each user to provide a Base URL. Resolve it in this order: the current Codex provider in CC Switch, `base_url` from `config.local.json` in the skill root, then `OPENAI_BASE_URL`. CC Switch is optional; missing, locked, damaged, ambiguous, or incompatible CC Switch data safely falls through to the next source. To use the file-based option, copy `config.example.json` to `config.local.json` and replace the placeholder URL. Never put an API key in either configuration file.
 
-Require `OPENAI_API_KEY` for live requests. Read the key only from that environment variable. Never print, persist, or hardcode it. If neither Base URL source is configured, stop with the script's configuration error; there is no default gateway.
+For live requests, resolve the API key from the current Codex provider in CC Switch, then `OPENAI_API_KEY`. Never print, persist, or hardcode it. If no Base URL or API key source is available, stop with the script's configuration error; there is no default gateway.
 
 ## Choose a command
 
@@ -29,7 +29,7 @@ Prompt augmentation is enabled by default. Supply any relevant fields such as `-
 
 ## Validate and execute
 
-Run `--dry-run` first when parameters or output paths are uncertain. Dry-run validates Base URL, prompt, model limits, inputs, and planned outputs without reading `OPENAI_API_KEY` or sending a request.
+Run `--dry-run` first when parameters or output paths are uncertain. Dry-run may read the current CC Switch Base URL, but never queries the CC Switch API key or reads `OPENAI_API_KEY`; it sends no request.
 
 For live work, preserve the requested model and controls. If a gateway rejects an option, report the unsupported option instead of silently changing the request. `gpt-image-2` accepts constrained flexible sizes but not transparent output; older GPT Image models accept only `auto`, `1024x1024`, `1536x1024`, or `1024x1536`. Transparent output requires an older GPT Image model and PNG or WebP.
 
