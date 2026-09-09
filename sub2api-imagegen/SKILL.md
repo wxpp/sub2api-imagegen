@@ -21,7 +21,7 @@ For live requests, resolve the API key from the current Codex provider in CC Swi
 
 Defaults match the image CLI workflow: `gpt-image-2`, `size=auto`, `quality=medium`, `output_format=png`, one image, and `output/imagegen/output.png`. Use `--prompt-file` instead of `--prompt` for long prompts. Use `--out` for a named output or `--out-dir` for generated names.
 
-For edits, repeat `--image` in the intended order. Use at most 16 inputs. Pass `--mask` once; it applies to the first image. Do not pass `--input-fidelity` with `gpt-image-2`.
+For edits, repeat `--image` in the intended order. Use at most 16 inputs, and require every input image and mask to be smaller than 50MB. Pass `--mask` once; it applies to the first image. Do not pass `--input-fidelity` with `gpt-image-2`.
 
 ## Build prompts
 
@@ -32,6 +32,8 @@ Prompt augmentation is enabled by default. Supply any relevant fields such as `-
 Run `--dry-run` first when parameters or output paths are uncertain. Dry-run may read the current CC Switch Base URL, but never queries the CC Switch API key or reads `OPENAI_API_KEY`; it sends no request.
 
 For live work, preserve the requested model and controls. If a gateway rejects an option, report the unsupported option instead of silently changing the request. `gpt-image-2` accepts constrained flexible sizes but not transparent output; older GPT Image models accept only `auto`, `1024x1024`, `1536x1024`, or `1024x1536`. Transparent output requires an older GPT Image model and PNG or WebP.
+
+Keep the default `--max-attempts 3` unless the user asks for a different retry budget. Generation, editing, and batch jobs delegate transient retries to the official OpenAI Python SDK; setting `--max-attempts 1` disables retries.
 
 Use `--force` only after explicit permission to replace files. When `--downscale-max-dim` is set, keep the full-size file and also write the suffixed copy.
 

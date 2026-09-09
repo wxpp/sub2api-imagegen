@@ -40,7 +40,7 @@ def _input_path(value: str, base_dir: Path | None = None, *, label: str = "image
     if not path.is_file():
         raise ValueError(f"input file does not exist: {path}")
     if path.stat().st_size >= MAX_INPUT_BYTES:
-        print(f"warning: {label} reaches or exceeds 50MB: {path}", file=sys.stderr)
+        raise ValueError(f"{label} must be smaller than 50MB: {path}")
     return path
 
 
@@ -112,8 +112,8 @@ def print_dry_run(job: PreparedJob) -> None:
     print(json.dumps(dry_run_data(job), ensure_ascii=False, indent=2))
 
 
-def request_live(job: PreparedJob, base_url: str) -> Any:
-    client = make_client(base_url)
+def request_live(job: PreparedJob, base_url: str, max_attempts: int) -> Any:
+    client = make_client(base_url, max_attempts)
     try:
         kwargs = request_kwargs(job.values, job.prompt)
         if job.command == "generate":
@@ -141,5 +141,11 @@ def finish_response(job: PreparedJob, response: Any) -> list[Path]:
     )
 
 
-def run_live(job: PreparedJob, base_url: str) -> list[Path]:
-    return finish_response(job, request_live(job, base_url))
+def run_live(
+    job: PreparedJob,
+    base_url: str,
+    *,
+    max_attempts: int,
+) -> list[Path]:
+    response = request_live(job, base_url, max_attempts)
+    return finish_response(job, response)

@@ -17,6 +17,8 @@ DEFAULT_MODEL = "gpt-image-2"
 DEFAULT_SIZE = "auto"
 DEFAULT_QUALITY = "medium"
 DEFAULT_FORMAT = "png"
+DEFAULT_MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = 10
 COMPATIBLE_USER_AGENT = "python-requests/2.32.5"
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_CONFIG_PATH = SKILL_ROOT / "config.local.json"
@@ -74,10 +76,17 @@ def resolve_api_key() -> str:
     return key
 
 
-def make_client(base_url: str) -> OpenAI:
+def make_client(base_url: str, max_attempts: int) -> OpenAI:
+    if not 1 <= max_attempts <= MAX_ATTEMPTS:
+        raise ValueError(f"--max-attempts must be between 1 and {MAX_ATTEMPTS}")
     key = resolve_api_key()
     transport = DefaultHttpxClient(event_hooks={"request": [clean_sdk_headers]})
-    return OpenAI(api_key=key, base_url=base_url, http_client=transport)
+    return OpenAI(
+        api_key=key,
+        base_url=base_url,
+        http_client=transport,
+        max_retries=max_attempts - 1,
+    )
 
 
 def read_prompt(prompt: str | None, prompt_file: str | None, base_dir: Path | None = None) -> str:

@@ -5,14 +5,14 @@ import io
 import os
 import sys
 import tempfile
-import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
+from openai import PermissionDeniedError
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,13 +20,7 @@ SCRIPTS = ROOT / "sub2api-imagegen" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import imagegen_support
-from imagegen_batch import (
-    MAX_BATCH_JOBS,
-    _attempt_job,
-    _read_jobs,
-    is_retryable_error,
-    retry_after_seconds,
-)
+from imagegen_batch import MAX_BATCH_JOBS, _attempt_job, _read_jobs
 from imagegen_cli import main, parse_args
 from imagegen_io import (
     OutputPlan,
@@ -35,9 +29,16 @@ from imagegen_io import (
     response_bytes,
     save_images,
 )
-from imagegen_runner import MAX_INPUT_BYTES, _input_path, prepare_job
+from imagegen_runner import (
+    MAX_INPUT_BYTES,
+    _input_path,
+    prepare_job,
+    request_live,
+    run_live,
+)
 from imagegen_support import (
     clean_sdk_headers,
+    make_client,
     request_kwargs,
     resolve_base_url,
     structured_prompt,
@@ -89,6 +90,113 @@ class SupportTests(unittest.TestCase):
         self.assertEqual(payload["size"], "auto")
         self.assertEqual(payload["quality"], "medium")
         self.assertEqual(payload["output_format"], "png")
+
+    def test_client_uses_sdk_retry_count_for_total_attempts(self) -> None:
+        transport = object()
+        client = object()
+        with (
+            patch.object(imagegen_support, "resolve_api_key", return_value="placeholder"),
+            patch.object(imagegen_support, "DefaultHttpxClient", return_value=transport),
+            patch.object(imagegen_support, "OpenAI", return_value=client) as openai,
+        ):
+            self.assertIs(make_client("https://example.invalid/v1", 3), client)
+        openai.assert_called_once_with(
+            api_key="placeholder",
+            base_url="https://example.invalid/v1",
+            http_client=transport,
+            max_retries=2,
+        )
+        with self.assertRaisesRegex(ValueError, "between 1 and 10"):
+            make_client("https://example.invalid/v1", 0)
+
+    def test_sdk_retries_503_and_keeps_clean_headers(self) -> None:
+        attempts = 0
+        encoded = base64.b64encode(b"image-bytes").decode("ascii")
+        observed_headers: list[httpx.Headers] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            observed_headers.append(request.headers)
+            if attempts < 3:
+                return httpx.Response(
+                    503,
+                    headers={"Retry-After": "0"},
+                    json={"error": {"message": "busy", "type": "server_error"}},
+                )
+            return httpx.Response(200, json={"created": 0, "data": [{"b64_json": encoded}]})
+
+        transport = httpx.MockTransport(handler)
+
+        def build_http_client(**kwargs: object) -> httpx.Client:
+            return httpx.Client(transport=transport, **kwargs)
+
+        with (
+            patch.object(imagegen_support, "resolve_api_key", return_value="placeholder"),
+            patch.object(
+                imagegen_support,
+                "DefaultHttpxClient",
+                side_effect=build_http_client,
+            ),
+        ):
+            client = make_client("https://example.invalid/v1", 3)
+            try:
+                response = client.images.generate(
+                    model="gpt-image-2",
+                    prompt="robot",
+                    n=1,
+                    size="1024x1024",
+                )
+            finally:
+                client.close()
+
+        self.assertEqual(attempts, 3)
+        self.assertEqual(response.data[0].b64_json, encoded)
+        for headers in observed_headers:
+            self.assertEqual(headers["User-Agent"], "python-requests/2.32.5")
+            self.assertFalse(
+                any(name.lower().startswith("x-stainless-") for name in headers)
+            )
+            self.assertIn("Authorization", headers)
+
+    def test_sdk_does_not_retry_403(self) -> None:
+        attempts = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            return httpx.Response(
+                403,
+                request=request,
+                json={"error": {"message": "forbidden", "type": "permission_error"}},
+            )
+
+        transport = httpx.MockTransport(handler)
+
+        def build_http_client(**kwargs: object) -> httpx.Client:
+            return httpx.Client(transport=transport, **kwargs)
+
+        with (
+            patch.object(imagegen_support, "resolve_api_key", return_value="placeholder"),
+            patch.object(
+                imagegen_support,
+                "DefaultHttpxClient",
+                side_effect=build_http_client,
+            ),
+        ):
+            client = make_client("https://example.invalid/v1", 3)
+            try:
+                with self.assertRaises(PermissionDeniedError):
+                    client.images.generate(
+                        model="gpt-image-2",
+                        prompt="robot",
+                        n=1,
+                        size="1024x1024",
+                    )
+            finally:
+                client.close()
+
+        self.assertEqual(attempts, 1)
 
     def test_prompt_augmentation_can_be_disabled(self) -> None:
         values = {**DEFAULTS, "style": "watercolor", "negative": "letters"}
@@ -175,19 +283,37 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(jobs[1]["scene"], "studio")
             self.assertTrue(jobs[1]["future_option"])
 
-    def test_large_input_and_non_png_mask_warn_without_rejection(self) -> None:
+    def test_edit_inputs_must_be_smaller_than_50mb(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            large = root / "large.png"
-            with large.open("wb") as stream:
+            below_limit = root / "below.png"
+            with below_limit.open("wb") as stream:
+                stream.truncate(MAX_INPUT_BYTES - 1)
+            self.assertEqual(_input_path(str(below_limit)), below_limit)
+
+            at_limit = root / "at-limit.png"
+            with at_limit.open("wb") as stream:
                 stream.truncate(MAX_INPUT_BYTES)
-            warnings = io.StringIO()
-            with redirect_stderr(warnings):
-                self.assertEqual(_input_path(str(large)), large)
-            self.assertIn("reaches or exceeds 50MB", warnings.getvalue())
+            with self.assertRaisesRegex(ValueError, "must be smaller than 50MB"):
+                _input_path(str(at_limit))
 
             source = root / "source.png"
             source.write_bytes(b"source")
+            mask = root / "mask.png"
+            with mask.open("wb") as stream:
+                stream.truncate(MAX_INPUT_BYTES)
+            with self.assertRaisesRegex(ValueError, "mask must be smaller than 50MB"):
+                prepare_job(
+                    "edit",
+                    {
+                        **DEFAULTS,
+                        "prompt": "change background",
+                        "prompt_file": None,
+                        "image": [str(source)],
+                        "mask": str(mask),
+                    },
+                )
+
             mask = root / "mask.jpg"
             mask.write_bytes(b"mask")
             warnings = io.StringIO()
@@ -211,7 +337,7 @@ class BatchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "maximum is 500"):
                 _read_jobs(source)
 
-    def test_concurrency_and_attempt_boundaries_apply_to_dry_run(self) -> None:
+    def test_attempt_boundaries_apply_to_every_command(self) -> None:
         error_output = io.StringIO()
         with redirect_stderr(error_output), self.assertRaises(SystemExit):
             parse_args(
@@ -239,49 +365,112 @@ class BatchTests(unittest.TestCase):
                     "--dry-run",
                 ]
             )
+        with redirect_stderr(error_output), self.assertRaises(SystemExit):
+            parse_args(
+                [
+                    "generate",
+                    "--prompt",
+                    "robot",
+                    "--max-attempts",
+                    "0",
+                    "--dry-run",
+                ]
+            )
+        self.assertEqual(
+            parse_args(["edit", "--image", "source.png", "--prompt", "change"]).max_attempts,
+            3,
+        )
 
-    def test_retry_after_header_and_retry_classification(self) -> None:
-        error = RuntimeError("service unavailable")
-        error.response = httpx.Response(503, headers={"Retry-After": "0.25"})
-        self.assertEqual(retry_after_seconds(error), 0.25)
-        self.assertTrue(is_retryable_error(error))
-        self.assertFalse(is_retryable_error(ValueError("invalid response data")))
-        self.assertFalse(is_retryable_error(ValueError("validation timeout value is invalid")))
-
-    def test_only_request_failures_are_retried(self) -> None:
-        class RateLimitError(Exception):
-            retry_after = 0.1
-
+    def test_batch_delegates_retry_to_one_sdk_request(self) -> None:
         response = object()
         job = SimpleNamespace(index=1)
         with (
-            patch("imagegen_batch.request_live", side_effect=[RateLimitError(), response]) as request,
+            patch("imagegen_batch.request_live", return_value=response) as request,
             patch("imagegen_batch.finish_response", return_value=[Path("done.png")]),
-            patch("imagegen_batch.time.sleep") as sleep,
         ):
-            result = _attempt_job(job, "https://example.invalid/v1", 3, threading.Event())
+            result = _attempt_job(
+                job,
+                "https://example.invalid/v1",
+                3,
+                SimpleNamespace(is_set=lambda: False),
+            )
         self.assertEqual(result, [Path("done.png")])
-        self.assertEqual(request.call_count, 2)
-        sleep.assert_called_once_with(0.1)
+        request.assert_called_once_with(job, "https://example.invalid/v1", 3)
 
         with (
             patch("imagegen_batch.request_live", return_value=response) as request,
             patch("imagegen_batch.finish_response", side_effect=ValueError("bad base64")),
-            patch("imagegen_batch.time.sleep") as sleep,
             self.assertRaisesRegex(ValueError, "bad base64"),
         ):
-            _attempt_job(job, "https://example.invalid/v1", 3, threading.Event())
+            _attempt_job(
+                job,
+                "https://example.invalid/v1",
+                3,
+                SimpleNamespace(is_set=lambda: False),
+            )
         request.assert_called_once()
-        sleep.assert_not_called()
 
         with (
-            patch("imagegen_batch.request_live", side_effect=ValueError("bad request")) as request,
-            patch("imagegen_batch.time.sleep") as sleep,
-            self.assertRaisesRegex(ValueError, "bad request"),
+            patch("imagegen_batch.request_live", side_effect=RuntimeError("503")) as request,
+            self.assertRaisesRegex(RuntimeError, "503"),
         ):
-            _attempt_job(job, "https://example.invalid/v1", 3, threading.Event())
+            _attempt_job(
+                job,
+                "https://example.invalid/v1",
+                3,
+                SimpleNamespace(is_set=lambda: False),
+            )
         request.assert_called_once()
-        sleep.assert_not_called()
+
+    def test_generate_and_edit_pass_attempts_to_client_once(self) -> None:
+        response = object()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.png"
+            source.write_bytes(b"source")
+            jobs = [
+                SimpleNamespace(
+                    command="generate",
+                    values=DEFAULTS,
+                    prompt="robot",
+                    image_paths=[],
+                    mask_path=None,
+                ),
+                SimpleNamespace(
+                    command="edit",
+                    values=DEFAULTS,
+                    prompt="change sky",
+                    image_paths=[source],
+                    mask_path=None,
+                ),
+            ]
+            for job in jobs:
+                with self.subTest(command=job.command):
+                    client = SimpleNamespace(
+                        images=SimpleNamespace(
+                            generate=Mock(return_value=response),
+                            edit=Mock(return_value=response),
+                        ),
+                        close=Mock(),
+                    )
+                    with patch("imagegen_runner.make_client", return_value=client) as make:
+                        self.assertIs(
+                            request_live(job, "https://example.invalid/v1", 4),
+                            response,
+                        )
+                    make.assert_called_once_with("https://example.invalid/v1", 4)
+                    getattr(client.images, job.command).assert_called_once()
+                    client.close.assert_called_once()
+
+    def test_single_response_processing_failure_is_not_retried(self) -> None:
+        job = SimpleNamespace(command="generate")
+        response = object()
+        with (
+            patch("imagegen_runner.request_live", return_value=response) as request,
+            patch("imagegen_runner.finish_response", side_effect=ValueError("bad base64")),
+            self.assertRaisesRegex(ValueError, "bad base64"),
+        ):
+            run_live(job, "https://example.invalid/v1", max_attempts=3)
+        request.assert_called_once_with(job, "https://example.invalid/v1", 3)
 
 
 class DryRunTests(unittest.TestCase):

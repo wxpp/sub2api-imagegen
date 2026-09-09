@@ -145,7 +145,11 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 
 CLI 默认使用 `gpt-image-2`、`size=auto`、`quality=medium`、`output_format=png`，默认输出到 `output/imagegen/output.png`。如果网关使用其他 GPT Image 模型，需要在请求中指定对应模型 ID。
 
-Skill 同时支持长提示词文件、多图编辑、Mask、提示词结构字段、1–10 张变体、透明背景校验、可选下采样，以及带并发、重试和失败策略的批处理输入（纯提示词行或 JSON 对象）。它会处理 Images API 返回的 Base64 图片或图片 URL。完整参数由安装后的 `sub2api-imagegen/references/cli.md` 说明。
+Skill 同时支持长提示词文件、多图编辑、Mask、提示词结构字段、1–10 张变体、透明背景校验、可选下采样，以及带并发和失败策略的批处理输入（纯提示词行或 JSON 对象）。它会处理 Images API 返回的 Base64 图片或图片 URL。完整参数由安装后的 `sub2api-imagegen/references/cli.md` 说明。
+
+生成、编辑和批处理请求默认最多尝试 3 次。重试完全交给官方 OpenAI Python SDK 处理，适用于 `408`、`409`、`429`、服务器 `5xx`、连接错误和超时；SDK 会处理 `Retry-After` 和退避。可用 `--max-attempts 1..10` 调整总尝试次数，设为 `1` 可关闭重试。
+
+编辑最多接受 16 张输入图。每张输入图和 Mask 必须小于 50MB；达到或超过 50MB 会在发送请求前直接失败，避免把已知无效的大文件上传到网关。
 
 `--dry-run` 会检查 Base URL、参数、输入和输出路径，但不会查询 CC Switch 中的 Key、读取 `OPENAI_API_KEY` 或发送请求。除非明确使用 `--force`，已有文件不会被覆盖。
 
@@ -164,6 +168,8 @@ Skill 同时支持长提示词文件、多图编辑、Mask、提示词结构字�
 - `an API key is required`：在 CC Switch 中启用包含 Key 的 Codex Provider，或在真实请求前设置 `OPENAI_API_KEY`；
 - `403` 或请求被拦截：确认网关接受该 User-Agent，并检查是否还有网关侧安全规则；
 - `400` 或参数不支持：检查网关是否支持当前模型及 CLI 发送的默认或显式参数；
+- `503`：通常是网关或上游暂时不可用；Skill 会自动重试，达到 `--max-attempts` 后仍失败才退出；
+- `image/mask must be smaller than 50MB`：压缩或缩小输入文件后再试；
 - `refusing to overwrite existing output`：更换输出路径，或确认后添加 `--force`；
 - 编辑失败：确认输入图片存在，并确认网关实现了 Images Edit API。
 

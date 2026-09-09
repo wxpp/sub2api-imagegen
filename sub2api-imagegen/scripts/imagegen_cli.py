@@ -7,7 +7,6 @@ import sys
 from collections.abc import Sequence
 
 from imagegen_batch import (
-    MAX_ATTEMPTS,
     MAX_CONCURRENCY,
     dry_run_batch,
     prepare_batch,
@@ -17,9 +16,11 @@ from imagegen_io import validate_output_plans
 from imagegen_runner import prepare_job, print_dry_run, run_live
 from imagegen_support import (
     DEFAULT_FORMAT,
+    DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MODEL,
     DEFAULT_QUALITY,
     DEFAULT_SIZE,
+    MAX_ATTEMPTS,
     resolve_base_url,
 )
 
@@ -55,6 +56,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--negative")
     parser.add_argument("--downscale-max-dim", type=int)
     parser.add_argument("--downscale-suffix", default="-web")
+    parser.add_argument("--max-attempts", type=int, default=DEFAULT_MAX_ATTEMPTS)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,7 +76,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_arguments(batch)
     batch.add_argument("--input", required=True)
     batch.add_argument("--concurrency", type=int, default=5)
-    batch.add_argument("--max-attempts", type=int, default=3)
     batch.add_argument("--fail-fast", action="store_true")
     return parser
 
@@ -84,6 +85,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.command != "generate-batch" and args.out and args.out_dir:
         parser.error("--out and --out-dir are mutually exclusive")
+    if not 1 <= args.max_attempts <= MAX_ATTEMPTS:
+        parser.error(f"--max-attempts must be between 1 and {MAX_ATTEMPTS}")
     if args.command == "generate-batch":
         if not args.out_dir:
             parser.error("generate-batch requires --out-dir")
@@ -91,8 +94,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             parser.error("generate-batch does not accept global --out; set out per JSONL job")
         if not 1 <= args.concurrency <= MAX_CONCURRENCY:
             parser.error(f"--concurrency must be between 1 and {MAX_CONCURRENCY}")
-        if not 1 <= args.max_attempts <= MAX_ATTEMPTS:
-            parser.error(f"--max-attempts must be between 1 and {MAX_ATTEMPTS}")
     return args
 
 
@@ -103,7 +104,7 @@ def _run_single(args: argparse.Namespace, base_url: str) -> int:
     if args.dry_run:
         print_dry_run(job)
         return 0
-    for path in run_live(job, base_url):
+    for path in run_live(job, base_url, max_attempts=args.max_attempts):
         print(path)
     return 0
 

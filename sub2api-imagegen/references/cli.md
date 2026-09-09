@@ -8,9 +8,15 @@ Use this reference when an image request needs controls beyond a basic generatio
 - `edit`: one prompt plus repeated `--image`; optionally add one `--mask` and supported `--input-fidelity`.
 - `generate-batch`: JSONL generation jobs under a required `--out-dir`.
 
-All commands accept either `--prompt` or `--prompt-file`. They also accept `--model`, `--size`, `--quality`, `--background`, `--output-format`, `--output-compression`, `--moderation`, `--force`, `--dry-run`, and output/downscale controls.
+All commands accept either `--prompt` or `--prompt-file`. They also accept `--model`, `--size`, `--quality`, `--background`, `--output-format`, `--output-compression`, `--moderation`, `--max-attempts`, `--force`, `--dry-run`, and output/downscale controls.
 
-Edit input files at or above 50MB produce a warning instead of a local rejection; the gateway still decides whether to accept them. A non-PNG mask also produces a warning because masks are expected to be PNG files with an alpha channel.
+Edit input images and masks must each be smaller than 50MB; files at or above 50MB are rejected before a request is sent. A non-PNG mask produces a warning because masks are expected to be PNG files with an alpha channel. Edit accepts at most 16 input images.
+
+## Retries
+
+`--max-attempts N` controls the total number of live request attempts from 1 through 10; the default is `3`. This applies to generation, editing, and batch jobs. Set it to `1` to disable retries.
+
+Retries are delegated to the official OpenAI Python SDK. Its transient policy covers HTTP `408`, `409`, `429`, server `5xx`, connection errors, and timeouts, and handles `Retry-After` and bounded backoff. Invalid parameters, authentication and permission failures, response decoding errors, and filesystem failures are not retried.
 
 ## Prompt fields
 
@@ -59,9 +65,7 @@ JSON jobs may override generation values, prompt fields, output filename, or dow
 Use:
 
 - `--concurrency N` to cap parallel live requests from 1 through 25; default `5`.
-- `--max-attempts N` to set 1 through 10 attempts for transient or rate-limit request failures; default `3`.
+- `--max-attempts N` uses the common retry policy described above; default `3`.
 - `--fail-fast` to cancel work that has not started after the first failure.
-
-The retry delay honors a discoverable `Retry-After`; otherwise it uses bounded exponential backoff. Invalid parameters, response decoding errors, and filesystem failures are not retried.
 
 Batch dry-runs parse and validate every job and all limits but do not start workers or query/read the API key. They may read the Base URL from the current CC Switch Codex provider.

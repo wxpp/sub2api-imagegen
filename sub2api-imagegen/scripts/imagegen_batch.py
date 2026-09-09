@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 import threading
-import time
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,10 +18,10 @@ from imagegen_runner import (
     print_dry_run,
     request_live,
 )
+from imagegen_support import MAX_ATTEMPTS
 
 MAX_BATCH_JOBS = 500
 MAX_CONCURRENCY = 25
-MAX_ATTEMPTS = 10
 
 
 def _read_jobs(path: Path) -> list[dict[str, Any]]:
@@ -94,91 +90,16 @@ def dry_run_batch(jobs: list[PreparedJob]) -> None:
         print_dry_run(job)
 
 
-def _status_code(exc: Exception) -> int | None:
-    value = getattr(exc, "status_code", None)
-    if isinstance(value, int):
-        return value
-    response = getattr(exc, "response", None)
-    value = getattr(response, "status_code", None)
-    return value if isinstance(value, int) else None
-
-
-def retry_after_seconds(exc: Exception) -> float | None:
-    for name in ("retry_after", "retry_after_seconds"):
-        value = getattr(exc, name, None)
-        if isinstance(value, (int, float)) and value >= 0:
-            return float(value)
-    header_value: str | None = None
-    for source in (exc, getattr(exc, "response", None)):
-        headers = getattr(source, "headers", None)
-        if headers is not None:
-            value = headers.get("retry-after") or headers.get("Retry-After")
-            if value is not None:
-                header_value = str(value).strip()
-                break
-    if header_value:
-        try:
-            return max(0.0, float(header_value))
-        except ValueError:
-            try:
-                target = parsedate_to_datetime(header_value)
-                if target.tzinfo is None:
-                    target = target.replace(tzinfo=timezone.utc)
-                return max(0.0, (target - datetime.now(timezone.utc)).total_seconds())
-            except (TypeError, ValueError, OverflowError):
-                pass
-    match = re.search(r"retry[- ]after[:= ]+([0-9]+(?:\.[0-9]+)?)", str(exc), re.IGNORECASE)
-    return float(match.group(1)) if match else None
-
-
-def is_retryable_error(exc: Exception) -> bool:
-    if isinstance(exc, (ValueError, TypeError)):
-        return False
-    status = _status_code(exc)
-    if status in {408, 409, 425, 429, 500, 502, 503, 504}:
-        return True
-    name = type(exc).__name__.lower()
-    message = str(exc).lower()
-    if "ratelimit" in name or "rate_limit" in name:
-        return True
-    if "429" in message or "rate limit" in message or "too many requests" in message:
-        return True
-    transient_names = ("timeout", "timedout", "temporary", "apiconnection", "networkerror")
-    if any(marker in name for marker in transient_names):
-        return True
-    if isinstance(exc, (TimeoutError, ConnectionError)):
-        return True
-    return any(
-        marker in message
-        for marker in ("timed out", "timeout", "connection reset", "temporarily unavailable")
-    )
-
-
 def _attempt_job(
     job: PreparedJob,
     base_url: str,
     max_attempts: int,
     stop: threading.Event,
 ) -> list[Path]:
-    for attempt in range(1, max_attempts + 1):
-        if stop.is_set():
-            raise RuntimeError("cancelled after another batch job failed")
-        try:
-            response = request_live(job, base_url)
-        except Exception as exc:
-            if not is_retryable_error(exc) or attempt == max_attempts:
-                raise
-            delay = retry_after_seconds(exc)
-            sleep_seconds = delay if delay is not None else min(60.0, 2.0**attempt)
-            print(
-                f"batch job {job.index} attempt {attempt}/{max_attempts} failed "
-                f"({type(exc).__name__}); retrying in {sleep_seconds:.1f}s",
-                file=sys.stderr,
-            )
-            time.sleep(sleep_seconds)
-        else:
-            return finish_response(job, response)
-    raise RuntimeError("retry loop ended unexpectedly")
+    if stop.is_set():
+        raise RuntimeError("cancelled after another batch job failed")
+    response = request_live(job, base_url, max_attempts)
+    return finish_response(job, response)
 
 
 def run_batch(
