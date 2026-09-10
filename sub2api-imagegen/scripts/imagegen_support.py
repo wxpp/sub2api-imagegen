@@ -6,6 +6,7 @@ import json
 import os
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,8 @@ import httpx
 from ccswitch_config import resolve_ccswitch_api_key, resolve_ccswitch_base_url
 from openai import DefaultHttpxClient, OpenAI
 
-DEFAULT_MODEL = "gpt-image-2"
+DEFAULT_GENERATE_MODEL = "gpt-image-2.5-flare"
+DEFAULT_EDIT_MODEL = "gpt-image-2.5-sunburst"
 DEFAULT_SIZE = "auto"
 DEFAULT_QUALITY = "medium"
 DEFAULT_FORMAT = "png"
@@ -22,7 +24,46 @@ MAX_ATTEMPTS = 10
 COMPATIBLE_USER_AGENT = "python-requests/2.32.5"
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_CONFIG_PATH = SKILL_ROOT / "config.local.json"
-OLDER_MODEL_SIZES = {"auto", "1024x1024", "1536x1024", "1024x1536"}
+STANDARD_IMAGE_SIZES = frozenset({"auto", "1024x1024", "1536x1024", "1024x1536"})
+STANDARD_QUALITY_VALUES = frozenset({"low", "medium", "high", "auto"})
+
+
+@dataclass(frozen=True)
+class ModelProfile:
+    sizes: frozenset[str] | None
+    qualities: frozenset[str]
+    supports_transparent_background: bool
+    supports_input_fidelity: bool
+    custom_size_rules: bool = False
+
+
+MODEL_PROFILES = {
+    "gpt-image-2": ModelProfile(
+        sizes=None,
+        qualities=STANDARD_QUALITY_VALUES,
+        supports_transparent_background=False,
+        supports_input_fidelity=False,
+        custom_size_rules=True,
+    ),
+    "gpt-image-2.5-flare": ModelProfile(
+        sizes=STANDARD_IMAGE_SIZES,
+        qualities=STANDARD_QUALITY_VALUES,
+        supports_transparent_background=False,
+        supports_input_fidelity=False,
+    ),
+    "gpt-image-2.5-sunburst": ModelProfile(
+        sizes=STANDARD_IMAGE_SIZES,
+        qualities=STANDARD_QUALITY_VALUES,
+        supports_transparent_background=False,
+        supports_input_fidelity=False,
+    ),
+}
+FALLBACK_MODEL_PROFILE = ModelProfile(
+    sizes=STANDARD_IMAGE_SIZES,
+    qualities=STANDARD_QUALITY_VALUES,
+    supports_transparent_background=True,
+    supports_input_fidelity=True,
+)
 PROMPT_FIELDS = (
     ("use_case", "Use case"),
     ("scene", "Scene/background"),
@@ -123,12 +164,19 @@ def structured_prompt(prompt: str, values: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def validate_size(model: str, size: str) -> None:
+def model_profile(model: str) -> ModelProfile:
     if not model.startswith("gpt-image-"):
         raise ValueError("model must be in the gpt-image family")
-    if model != "gpt-image-2":
-        if size not in OLDER_MODEL_SIZES:
-            raise ValueError("this model supports auto, 1024x1024, 1536x1024, or 1024x1536")
+    return MODEL_PROFILES.get(model, FALLBACK_MODEL_PROFILE)
+
+
+def validate_size(model: str, size: str) -> None:
+    profile = model_profile(model)
+    if not profile.custom_size_rules:
+        assert profile.sizes is not None
+        if size not in profile.sizes:
+            supported = ", ".join(sorted(profile.sizes))
+            raise ValueError(f"{model} supports these sizes: {supported}")
         return
     if size == "auto":
         return
@@ -149,12 +197,14 @@ def validate_size(model: str, size: str) -> None:
 
 def validate_options(values: Mapping[str, Any], command: str) -> None:
     model = str(values["model"])
+    profile = model_profile(model)
     validate_size(model, str(values["size"]))
     n = int(values["n"])
     if not 1 <= n <= 10:
         raise ValueError("--n must be between 1 and 10")
-    if values["quality"] not in {"low", "medium", "high", "auto"}:
-        raise ValueError("quality must be low, medium, high, or auto")
+    if values["quality"] not in profile.qualities:
+        supported = ", ".join(sorted(profile.qualities))
+        raise ValueError(f"{model} supports these quality values: {supported}")
     output_format = values["output_format"]
     if output_format not in {"png", "jpeg", "jpg", "webp"}:
         raise ValueError("output format must be png, jpeg, jpg, or webp")
@@ -162,8 +212,10 @@ def validate_options(values: Mapping[str, Any], command: str) -> None:
     if background not in {None, "auto", "opaque", "transparent"}:
         raise ValueError("background must be auto, opaque, or transparent")
     if background == "transparent":
-        if model == "gpt-image-2":
-            raise ValueError("gpt-image-2 does not support transparent background output")
+        if not profile.supports_transparent_background:
+            raise ValueError(
+                f"transparent background output is not supported or verified for {model}"
+            )
         if output_format not in {"png", "webp"}:
             raise ValueError("transparent backgrounds require png or webp output")
     compression = values.get("output_compression")
@@ -176,8 +228,10 @@ def validate_options(values: Mapping[str, Any], command: str) -> None:
         raise ValueError("--input-fidelity is edit-only")
     if fidelity not in {None, "low", "high"}:
         raise ValueError("input fidelity must be low or high")
-    if model == "gpt-image-2" and fidelity is not None:
-        raise ValueError("gpt-image-2 always uses high input fidelity; omit --input-fidelity")
+    if fidelity is not None and not profile.supports_input_fidelity:
+        if model == "gpt-image-2":
+            raise ValueError("gpt-image-2 always uses high input fidelity; omit --input-fidelity")
+        raise ValueError(f"--input-fidelity is not supported or verified for {model}")
     downscale = values.get("downscale_max_dim")
     if downscale is not None and int(downscale) < 1:
         raise ValueError("--downscale-max-dim must be positive")

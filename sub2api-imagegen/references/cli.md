@@ -8,6 +8,8 @@ Use this reference when an image request needs controls beyond a basic generatio
 - `edit`: one prompt plus repeated `--image`; optionally add one `--mask` and supported `--input-fidelity`.
 - `generate-batch`: JSONL generation jobs under a required `--out-dir`.
 
+Default models are command-specific: `generate` and `generate-batch` use `gpt-image-2.5-flare`; `edit` uses `gpt-image-2.5-sunburst`.
+
 All commands accept either `--prompt` or `--prompt-file`. They also accept `--model`, `--size`, `--quality`, `--background`, `--output-format`, `--output-compression`, `--moderation`, `--max-attempts`, `--force`, `--dry-run`, and output/downscale controls.
 
 Edit input images and masks must each be smaller than 50MB; files at or above 50MB are rejected before a request is sent. A non-PNG mask produces a warning because masks are expected to be PNG files with an alpha channel. Edit accepts at most 16 input images.
@@ -38,8 +40,10 @@ Use `--augment` to explicitly enable the default behavior. If both flags occur, 
 
 ## Models and formats
 
-The CLI accepts GPT Image model IDs only.
+The CLI accepts GPT Image model IDs only. The 2.5 defaults were verified for generation and editing through an OpenAI-compatible gateway; unverified parameters remain conservatively disabled.
 
+- `gpt-image-2.5-flare`: default for generation and batches; use for fast iteration and ordinary image creation. Sizes: `auto`, `1024x1024`, `1536x1024`, or `1024x1536`.
+- `gpt-image-2.5-sunburst`: default for editing; use for precise changes and reference preservation. Sizes: `auto`, `1024x1024`, `1536x1024`, or `1024x1536`.
 - `gpt-image-2`: `auto` or a numeric size whose edges are multiples of 16, no edge exceeds 3840, aspect ratio is at most 3:1, and total pixels are between 655,360 and 8,294,400.
 - Other `gpt-image-*` models: `auto`, `1024x1024`, `1536x1024`, or `1024x1536`.
 - Quality: `low`, `medium`, `high`, or `auto`.
@@ -48,7 +52,7 @@ The CLI accepts GPT Image model IDs only.
 - Compression: integer from 0 through 100.
 - Moderation: `auto` or `low`.
 
-Native transparency is rejected for `gpt-image-2`. It also requires PNG or WebP. `input_fidelity` is edit-only, accepts `low` or `high`, and must be omitted for `gpt-image-2`.
+Native transparency is rejected for both 2.5 models and `gpt-image-2` until model-specific support is verified. Where transparency is supported, it requires PNG or WebP. `input_fidelity` is edit-only, accepts `low` or `high`, and must be omitted for both 2.5 models and `gpt-image-2`.
 
 ## Outputs
 

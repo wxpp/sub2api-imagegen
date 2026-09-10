@@ -19,9 +19,11 @@ For live requests, resolve the API key from the current Codex provider in CC Swi
 - Use `generate-batch` only for a line-oriented prompt/JSON job list and always give it `--out-dir`.
 - Read [references/cli.md](references/cli.md) before using masks, prompt fields, downscaling, batch concurrency, retry controls, or model-specific options.
 
-Defaults match the image CLI workflow: `gpt-image-2`, `size=auto`, `quality=medium`, `output_format=png`, one image, and `output/imagegen/output.png`. Use `--prompt-file` instead of `--prompt` for long prompts. Use `--out` for a named output or `--out-dir` for generated names.
+Generation and batch generation default to `gpt-image-2.5-flare`; editing defaults to `gpt-image-2.5-sunburst`. Use Flare for ordinary generation, fast iteration, and batches. Use Sunburst for precise edits, reference preservation, and final edit-quality work. Keep `gpt-image-2` available only when the user requests it or a gateway lacks the 2.5 models.
 
-For edits, repeat `--image` in the intended order. Use at most 16 inputs, and require every input image and mask to be smaller than 50MB. Pass `--mask` once; it applies to the first image. Do not pass `--input-fidelity` with `gpt-image-2`.
+Other defaults are `size=auto`, `quality=medium`, `output_format=png`, one image, and `output/imagegen/output.png`. Use `--prompt-file` instead of `--prompt` for long prompts. Use `--out` for a named output or `--out-dir` for generated names.
+
+For edits, repeat `--image` in the intended order. Use at most 16 inputs, and require every input image and mask to be smaller than 50MB. Pass `--mask` once; it applies to the first image. Do not pass `--input-fidelity` with either 2.5 model or `gpt-image-2`.
 
 ## Build prompts
 
@@ -31,7 +33,7 @@ Prompt augmentation is enabled by default. Supply any relevant fields such as `-
 
 Run `--dry-run` first when parameters or output paths are uncertain. Dry-run may read the current CC Switch Base URL, but never queries the CC Switch API key or reads `OPENAI_API_KEY`; it sends no request.
 
-For live work, preserve the requested model and controls. If a gateway rejects an option, report the unsupported option instead of silently changing the request. `gpt-image-2` accepts constrained flexible sizes but not transparent output; older GPT Image models accept only `auto`, `1024x1024`, `1536x1024`, or `1024x1536`. Transparent output requires an older GPT Image model and PNG or WebP.
+For live work, preserve the requested model and controls. If a gateway rejects an option, report the unsupported option instead of silently changing the request. Treat 2.5 capabilities conservatively until verified: Flare and Sunburst accept `auto`, `1024x1024`, `1536x1024`, or `1024x1536`, but not transparent output or explicit `input_fidelity`. `gpt-image-2` keeps its constrained flexible sizes and also rejects transparent output. Older GPT Image models use the four standard sizes; transparent output requires a supporting older model and PNG or WebP.
 
 Keep the default `--max-attempts 3` unless the user asks for a different retry budget. Generation, editing, and batch jobs delegate transient retries to the official OpenAI Python SDK; setting `--max-attempts 1` disables retries.
 

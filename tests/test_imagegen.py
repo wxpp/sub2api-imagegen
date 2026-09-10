@@ -37,6 +37,7 @@ from imagegen_runner import (
     run_live,
 )
 from imagegen_support import (
+    MODEL_PROFILES,
     clean_sdk_headers,
     make_client,
     request_kwargs,
@@ -90,6 +91,55 @@ class SupportTests(unittest.TestCase):
         self.assertEqual(payload["size"], "auto")
         self.assertEqual(payload["quality"], "medium")
         self.assertEqual(payload["output_format"], "png")
+
+    def test_command_defaults_select_25_profiles(self) -> None:
+        self.assertEqual(
+            parse_args(["generate", "--prompt", "robot"]).model,
+            "gpt-image-2.5-flare",
+        )
+        self.assertEqual(
+            parse_args(["generate-batch", "--input", "jobs", "--out-dir", "out"]).model,
+            "gpt-image-2.5-flare",
+        )
+        self.assertEqual(
+            parse_args(["edit", "--image", "source.png", "--prompt", "change"]).model,
+            "gpt-image-2.5-sunburst",
+        )
+        self.assertEqual(
+            parse_args(
+                ["generate", "--prompt", "robot", "--model", "gpt-image-2"]
+            ).model,
+            "gpt-image-2",
+        )
+
+    def test_25_profiles_use_only_verified_options(self) -> None:
+        for model in ("gpt-image-2.5-flare", "gpt-image-2.5-sunburst"):
+            with self.subTest(model=model):
+                self.assertIn(model, MODEL_PROFILES)
+                for size in ("auto", "1024x1024", "1536x1024", "1024x1536"):
+                    validate_size(model, size)
+                with self.assertRaisesRegex(ValueError, model):
+                    validate_size(model, "2048x2048")
+                for quality in ("low", "medium", "high", "auto"):
+                    validate_options(
+                        {**DEFAULTS, "model": model, "quality": quality},
+                        "generate",
+                    )
+                with self.assertRaisesRegex(ValueError, "quality"):
+                    validate_options(
+                        {**DEFAULTS, "model": model, "quality": "xhigh"},
+                        "generate",
+                    )
+                with self.assertRaisesRegex(ValueError, "not supported or verified"):
+                    validate_options(
+                        {**DEFAULTS, "model": model, "background": "transparent"},
+                        "generate",
+                    )
+                with self.assertRaisesRegex(ValueError, "not supported or verified"):
+                    validate_options(
+                        {**DEFAULTS, "model": model, "input_fidelity": "high"},
+                        "edit",
+                    )
 
     def test_client_uses_sdk_retry_count_for_total_attempts(self) -> None:
         transport = object()
@@ -520,8 +570,11 @@ class DryRunTests(unittest.TestCase):
                 temp,
             )
             self.assertEqual([generate[0], edit[0], batch[0]], [0, 0, 0])
+            self.assertIn('"model": "gpt-image-2.5-flare"', generate[1])
             self.assertIn('"size": "auto"', generate[1])
+            self.assertIn('"model": "gpt-image-2.5-sunburst"', edit[1])
             self.assertIn('"endpoint": "/v1/images/edits"', edit[1])
+            self.assertIn('"model": "gpt-image-2.5-flare"', batch[1])
             self.assertIn('"job": 2', batch[1])
             self.assertIn("Style/medium: ink", batch[1])
 

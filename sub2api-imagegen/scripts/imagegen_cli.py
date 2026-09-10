@@ -15,9 +15,10 @@ from imagegen_batch import (
 from imagegen_io import validate_output_plans
 from imagegen_runner import prepare_job, print_dry_run, run_live
 from imagegen_support import (
+    DEFAULT_EDIT_MODEL,
     DEFAULT_FORMAT,
+    DEFAULT_GENERATE_MODEL,
     DEFAULT_MAX_ATTEMPTS,
-    DEFAULT_MODEL,
     DEFAULT_QUALITY,
     DEFAULT_SIZE,
     MAX_ATTEMPTS,
@@ -25,8 +26,8 @@ from imagegen_support import (
 )
 
 
-def add_common_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+def add_common_arguments(parser: argparse.ArgumentParser, *, default_model: str) -> None:
+    parser.add_argument("--model", default=default_model)
     parser.add_argument("--prompt")
     parser.add_argument("--prompt-file")
     parser.add_argument("--n", type=int, default=1)
@@ -64,16 +65,16 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     generate = commands.add_parser("generate", help="create images from one prompt")
-    add_common_arguments(generate)
+    add_common_arguments(generate, default_model=DEFAULT_GENERATE_MODEL)
 
     edit = commands.add_parser("edit", help="edit one or more input images")
-    add_common_arguments(edit)
+    add_common_arguments(edit, default_model=DEFAULT_EDIT_MODEL)
     edit.add_argument("--image", action="append", required=True)
     edit.add_argument("--mask")
     edit.add_argument("--input-fidelity")
 
     batch = commands.add_parser("generate-batch", help="run generation jobs from JSONL")
-    add_common_arguments(batch)
+    add_common_arguments(batch, default_model=DEFAULT_GENERATE_MODEL)
     batch.add_argument("--input", required=True)
     batch.add_argument("--concurrency", type=int, default=5)
     batch.add_argument("--fail-fast", action="store_true")

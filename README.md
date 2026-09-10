@@ -143,7 +143,9 @@ export OPENAI_BASE_URL="https://your-image-api.example/v1"
 使用 $sub2api-imagegen 生成一张草地上的小机器人图片。
 ```
 
-CLI 默认使用 `gpt-image-2`、`size=auto`、`quality=medium`、`output_format=png`，默认输出到 `output/imagegen/output.png`。如果网关使用其他 GPT Image 模型，需要在请求中指定对应模型 ID。
+CLI 的生成和批处理默认使用 `gpt-image-2.5-flare`，编辑默认使用 `gpt-image-2.5-sunburst`；其余默认值为 `size=auto`、`quality=medium`、`output_format=png`，默认输出到 `output/imagegen/output.png`。Flare 用于日常生成、快速迭代和批量任务；Sunburst 用于精细编辑和参考图保持。仍可通过 `--model gpt-image-2` 手动使用旧模型。
+
+2.5 模型已在兼容网关上实际验证生成与编辑。由于 2.5 的完整参数能力尚未逐项验证，本 Skill 对未知能力采取保守策略：2.5 暂只接受 `auto`、`1024x1024`、`1536x1024`、`1024x1536`，并暂不开放透明背景和 `input_fidelity`。这些限制会在可靠验证后更新。
 
 Skill 同时支持长提示词文件、多图编辑、Mask、提示词结构字段、1–10 张变体、透明背景校验、可选下采样，以及带并发和失败策略的批处理输入（纯提示词行或 JSON 对象）。它会处理 Images API 返回的 Base64 图片或图片 URL。完整参数由安装后的 `sub2api-imagegen/references/cli.md` 说明。
 
